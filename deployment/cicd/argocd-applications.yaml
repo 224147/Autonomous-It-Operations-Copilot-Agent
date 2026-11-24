@@ -1,0 +1,47 @@
+# ArgoCD Applications (GitOps). Apply once: kubectl apply -f deployment/cicd/argocd-applications.yaml
+# The CI pipeline pins the image tag per environment with `argocd app set --helm-set backend.image.tag=<sha>`.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: copilot-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/OWNER/REPO.git
+    targetRevision: main
+    path: deployment/helm/autonomous-it-ops-copilot
+    helm:
+      releaseName: copilot
+      parameters:
+        - {name: ingress.host, value: copilot-staging.example.com}
+        - {name: config.CORS_ORIGINS, value: "https://copilot-staging.example.com"}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: copilot-staging
+  syncPolicy:
+    automated: {prune: true, selfHeal: true}
+    syncOptions: [CreateNamespace=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: copilot-production
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/OWNER/REPO.git
+    targetRevision: main
+    path: deployment/helm/autonomous-it-ops-copilot
+    helm:
+      releaseName: copilot
+      parameters:
+        - {name: ingress.host, value: copilot.example.com}
+        - {name: config.CORS_ORIGINS, value: "https://copilot.example.com"}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: copilot
+  syncPolicy:
+    # Production syncs are triggered by the protected `production` GitHub environment (manual approval), not automatically.
+    syncOptions: [CreateNamespace=true]

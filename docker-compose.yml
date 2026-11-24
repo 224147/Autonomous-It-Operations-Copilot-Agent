@@ -1,0 +1,133 @@
+# Local / single-host stack: docker compose --env-file .env up --build
+# Required in .env: POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET, BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, GRAFANA_ADMIN_PASSWORD
+# (see .env.example). Nothing secret is stored in this file.
+name: autonomous-it-ops-copilot
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-production}
+  LOG_JSON: "true"
+  DATABASE_URL: postgresql+psycopg://copilot:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/copilot
+  DB_AUTO_CREATE: "false"
+  REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+  CHROMA_HOST: chroma
+  CHROMA_PORT: "8000"
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (>=32 chars)}
+  BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+  BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+  INGEST_API_KEYS: ${INGEST_API_KEYS:-}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+  REMEDIATION_MODE: ${REMEDIATION_MODE:-dry_run}
+  LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+  AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+  AZURE_OPENAI_CHAT_DEPLOYMENT: ${AZURE_OPENAI_CHAT_DEPLOYMENT:-}
+  AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-}
+  PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+  LOKI_URL: ${LOKI_URL:-http://loki:3100}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  HOME: /tmp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: copilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: copilot
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U copilot -d copilot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD}"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:1.5.9
+    volumes: [chromadata:/data]
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /data
+      ANONYMIZED_TELEMETRY: "FALSE"
+    restart: unless-stopped
+
+  migrate:
+    build: {context: ., dockerfile: deployment/docker/Dockerfile}
+    image: autonomous-it-ops-copilot-backend:local
+    command: ["alembic", "upgrade", "head"]
+    environment: *backend-env
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  backend:
+    image: autonomous-it-ops-copilot-backend:local
+    environment: *backend-env
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      chroma: {condition: service_started}
+    ports: ["8000:8000"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  frontend:
+    build: {context: ./frontend}
+    image: autonomous-it-ops-copilot-frontend:local
+    depends_on: [backend]
+    ports: ["8080:8080"]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./deployment/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deployment/monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    ports: ["9090:9090"]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.2.1
+    ports: ["3100:3100"]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment: {COLLECTOR_OTLP_ENABLED: "true"}
+    ports: ["16686:16686"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deployment/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deployment/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus, loki, jaeger]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  chromadata:

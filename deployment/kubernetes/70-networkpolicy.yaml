@@ -1,0 +1,73 @@
+# Zero-trust networking: default deny, then allow only the flows the platform needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: copilot}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-dns, namespace: copilot}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: backend, namespace: copilot}
+spec:
+  podSelector: {matchLabels: {app: copilot-backend}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+        - podSelector: {matchLabels: {app: copilot-frontend}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}   # Prometheus scrape
+        - namespaceSelector: {}                                                       # remove if collectors push from elsewhere
+          podSelector: {matchLabels: {app.kubernetes.io/component: collector}}
+      ports: [{protocol: TCP, port: 8000}]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: postgres}}
+        - podSelector: {matchLabels: {app: redis}}
+        - podSelector: {matchLabels: {app: chroma}}
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}}]
+    - ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}]   # Azure OpenAI / Entra / Vault / Kubernetes API
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: frontend, namespace: copilot}
+spec:
+  podSelector: {matchLabels: {app: copilot-frontend}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}}]
+      ports: [{protocol: TCP, port: 8080}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: copilot-backend}}}]
+      ports: [{protocol: TCP, port: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: datastores, namespace: copilot}
+spec:
+  podSelector:
+    matchExpressions: [{key: app, operator: In, values: [postgres, redis, chroma]}]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: copilot-backend}}
+        - podSelector: {matchLabels: {app: copilot-migrate}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: migrate, namespace: copilot}
+spec:
+  podSelector: {matchLabels: {app: copilot-migrate}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: postgres}}}]

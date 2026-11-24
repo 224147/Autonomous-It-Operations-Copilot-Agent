@@ -1,0 +1,33 @@
+[project]
+name = "autonomous-it-operations-copilot"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+extend-exclude = ["frontend", "alembic/versions", ".venv", "data", ".tmp"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "S", "UP"]
+ignore = [
+  "S101",  # asserts are used in tests
+  "B008",  # FastAPI Depends() in defaults
+  "B905",  # zip() lengths are guaranteed equal where used
+  "E501",
+  "UP007", "UP037", "UP045",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S311", "S608"]
+"agents/evaluation/*" = ["S311"]
+"scripts/*" = ["S"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "frontend", "data", ".tmp"]
+skips = ["B101"]

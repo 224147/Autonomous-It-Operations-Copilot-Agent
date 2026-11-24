@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: copilot-config
+  namespace: copilot
+data:
+  APP_ENV: production
+  LOG_JSON: "true"
+  LOG_LEVEL: INFO
+  DB_AUTO_CREATE: "false"
+  CHROMA_HOST: chroma
+  CHROMA_PORT: "8000"
+  CORS_ORIGINS: https://copilot.example.com
+  REMEDIATION_MODE: dry_run
+  REMEDIATION_ALLOWED_NAMESPACES: production
+  AUTO_APPROVE_MAX_RISK: none
+  PROMETHEUS_URL: http://prometheus-operated.monitoring:9090
+  LOKI_URL: http://loki.monitoring:3100
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger-collector.monitoring:4318
+  HOME: /tmp

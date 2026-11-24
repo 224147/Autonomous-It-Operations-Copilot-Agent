@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: copilot-frontend
+  namespace: copilot
+  labels: {app: copilot-frontend, app.kubernetes.io/part-of: autonomous-it-ops-copilot}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: copilot-frontend}}
+  template:
+    metadata: {labels: {app: copilot-frontend}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 101, runAsGroup: 101, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: frontend
+          image: ghcr.io/OWNER/autonomous-it-ops-copilot-frontend:latest
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /, port: http}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /, port: http}, periodSeconds: 20}
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: copilot-frontend, namespace: copilot, labels: {app: copilot-frontend}}
+spec:
+  selector: {app: copilot-frontend}
+  ports: [{name: http, port: 80, targetPort: http}]

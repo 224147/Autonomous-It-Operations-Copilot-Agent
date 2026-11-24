@@ -1,0 +1,14 @@
+Autonomous IT Operations Copilot {{ .Chart.AppVersion }} deployed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+{{- if .Values.ingress.enabled }}
+UI / API:  http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+Port-forward:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "copilot.fullname" . }}-backend 8000:8000
+{{- end }}
+
+Remediation mode: {{ index .Values.config "REMEDIATION_MODE" }}  (dry_run simulates actions; set REMEDIATION_MODE=live to act)
+Secrets are read from Secret "{{ include "copilot.secretName" . }}" - it must contain DATABASE_URL, REDIS_URL, JWT_SECRET and INGEST_API_KEYS.
+
+Smoke test:
+  kubectl -n {{ .Release.Namespace }} run curl --rm -it --image=curlimages/curl --restart=Never -- \
+    curl -s http://{{ include "copilot.fullname" . }}-backend:8000/health/ready

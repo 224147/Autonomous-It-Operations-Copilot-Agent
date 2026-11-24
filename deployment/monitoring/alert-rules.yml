@@ -1,0 +1,51 @@
+groups:
+  - name: copilot-platform
+    rules:
+      - alert: CopilotBackendDown
+        expr: up{job="copilot-backend"} == 0
+        for: 2m
+        labels: {severity: critical, service: autonomous-it-ops-copilot}
+        annotations: {summary: "Copilot backend is not scrapeable"}
+
+      - alert: CopilotHighApiErrorRate
+        expr: |
+          sum(rate(copilot_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(copilot_http_requests_total[5m])), 1) > 0.05
+        for: 5m
+        labels: {severity: warning, service: autonomous-it-ops-copilot}
+        annotations: {summary: "More than 5% of API requests fail"}
+
+      - alert: CopilotHighApiLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(copilot_http_request_duration_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: {severity: warning, service: autonomous-it-ops-copilot}
+        annotations: {summary: "API p95 latency above 2s"}
+
+      - alert: CopilotAgentFailures
+        expr: sum by (agent) (increase(copilot_agent_errors_total[15m])) > 3
+        labels: {severity: warning, service: autonomous-it-ops-copilot}
+        annotations: {summary: "Agent {{ $labels.agent }} is failing repeatedly"}
+
+      - alert: CopilotWorkflowQueueBacklog
+        expr: copilot_workflow_queue_depth > 20
+        for: 10m
+        labels: {severity: warning, service: autonomous-it-ops-copilot}
+        annotations: {summary: "Workflow queue backlog - add workers/replicas"}
+
+      - alert: CopilotSlowAlertProcessing
+        expr: histogram_quantile(0.95, sum by (le) (rate(copilot_alert_processing_seconds_bucket[15m]))) > 120
+        for: 15m
+        labels: {severity: warning, service: autonomous-it-ops-copilot}
+        annotations: {summary: "p95 alert-to-analysis time above 2 minutes"}
+
+      - alert: CopilotLowRcaAccuracy
+        expr: copilot_rca_accuracy_ratio < 0.85
+        for: 1h
+        labels: {severity: info, service: autonomous-it-ops-copilot}
+        annotations: {summary: "RCA accuracy (responder feedback) below the 85% target"}
+
+  # Availability SLO (99.9%) - requires blackbox probing of /health/ready, e.g. the Prometheus blackbox exporter.
+  - name: copilot-slo
+    rules:
+      - record: copilot:availability:ratio_30d
+        expr: avg_over_time(up{job="copilot-backend"}[30d])

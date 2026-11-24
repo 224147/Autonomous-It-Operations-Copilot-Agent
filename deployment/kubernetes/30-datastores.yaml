@@ -1,0 +1,110 @@
+# Self-contained PostgreSQL / Redis / Chroma for clusters without managed services.
+# For production prefer managed PostgreSQL + Redis and point DATABASE_URL / REDIS_URL at them (delete the matching blocks).
+apiVersion: v1
+kind: Service
+metadata: {name: postgres, namespace: copilot, labels: {app: postgres}}
+spec:
+  clusterIP: None
+  selector: {app: postgres}
+  ports: [{name: pg, port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: postgres, namespace: copilot}
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector: {matchLabels: {app: postgres}}
+  template:
+    metadata: {labels: {app: postgres}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 70, runAsGroup: 70, fsGroup: 70, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports: [{containerPort: 5432, name: pg}]
+          env:
+            - {name: POSTGRES_USER, value: copilot}
+            - {name: POSTGRES_DB, value: copilot}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: copilot-secrets, key: POSTGRES_PASSWORD}}
+          readinessProbe: {exec: {command: ["pg_isready", "-U", "copilot", "-d", "copilot"]}, periodSeconds: 10}
+          resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {memory: 1Gi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: run, mountPath: /var/run/postgresql}
+      volumes:
+        - {name: run, emptyDir: {}}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: ["ReadWriteOnce"], resources: {requests: {storage: 20Gi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: redis, namespace: copilot, labels: {app: redis}}
+spec:
+  selector: {app: redis}
+  ports: [{name: redis, port: 6379}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: redis, namespace: copilot}
+spec:
+  serviceName: redis
+  replicas: 1
+  selector: {matchLabels: {app: redis}}
+  template:
+    metadata: {labels: {app: redis}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 999, runAsGroup: 999, fsGroup: 999, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom: {secretKeyRef: {name: copilot-secrets, key: REDIS_PASSWORD}}
+          ports: [{containerPort: 6379, name: redis}]
+          readinessProbe: {tcpSocket: {port: 6379}, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {memory: 512Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: data, mountPath: /data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: ["ReadWriteOnce"], resources: {requests: {storage: 5Gi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: chroma, namespace: copilot, labels: {app: chroma}}
+spec:
+  selector: {app: chroma}
+  ports: [{name: http, port: 8000}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: chroma, namespace: copilot}
+spec:
+  serviceName: chroma
+  replicas: 1
+  selector: {matchLabels: {app: chroma}}
+  template:
+    metadata: {labels: {app: chroma}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: chroma
+          image: chromadb/chroma:1.5.9
+          env:
+            - {name: IS_PERSISTENT, value: "TRUE"}
+            - {name: PERSIST_DIRECTORY, value: /data}
+            - {name: ANONYMIZED_TELEMETRY, value: "FALSE"}
+          ports: [{containerPort: 8000, name: http}]
+          readinessProbe: {tcpSocket: {port: 8000}, periodSeconds: 10}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {memory: 1Gi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: data, mountPath: /data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: ["ReadWriteOnce"], resources: {requests: {storage: 10Gi}}}

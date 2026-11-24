@@ -1,0 +1,27 @@
+# Public entry point: Ingress (NGINX) -> frontend (NGINX, serves the SPA and proxies /api,/ws) ... or route /api and /ws
+# straight to the backend as below. Requires ingress-nginx and (optionally) cert-manager.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: copilot
+  namespace: copilot
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"      # websocket (Socket.IO)
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/affinity: cookie                # Socket.IO long-polling fallback needs stickiness
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [copilot.example.com]
+      secretName: copilot-tls
+  rules:
+    - host: copilot.example.com
+      http:
+        paths:
+          - {path: /api, pathType: Prefix, backend: {service: {name: copilot-backend, port: {number: 8000}}}}
+          - {path: /ws, pathType: Prefix, backend: {service: {name: copilot-backend, port: {number: 8000}}}}
+          - {path: /, pathType: Prefix, backend: {service: {name: copilot-frontend, port: {number: 80}}}}

@@ -1,0 +1,11 @@
+# Copy to backend.tf and fill in. State holds secrets: always use an encrypted remote backend with locking.
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "tfstate-rg"
+    storage_account_name = "tfstateaccount"
+    container_name       = "tfstate"
+    key                  = "autonomous-it-ops-copilot.tfstate"
+  }
+}
+# S3 alternative:
+# backend "s3" { bucket = "..." key = "copilot/terraform.tfstate" region = "..." dynamodb_table = "..." encrypt = true }

@@ -1,0 +1,11 @@
+host      = "copilot.example.com"
+image_tag = "REPLACE_WITH_COMMIT_SHA"
+
+# Secrets: do NOT put real values in a committed file. Provide them via environment variables instead:
+#   export TF_VAR_database_url='postgresql+psycopg://copilot:...@db.example.com:5432/copilot'
+#   export TF_VAR_redis_url='rediss://:...@redis.example.com:6380/0'
+#   export TF_VAR_jwt_secret="$(openssl rand -base64 48)"
+#   export TF_VAR_ingest_api_keys="$(openssl rand -hex 24)"
+
+remediation_mode       = "dry_run"
+remediation_namespaces = ["production"]

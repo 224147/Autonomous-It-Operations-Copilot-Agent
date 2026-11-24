@@ -1,0 +1,29 @@
+# Runtime dependencies (tested with Python 3.12-3.14)
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic[email]>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+python-multipart>=0.0.9
+sqlalchemy>=2.0,<2.2
+alembic>=1.13,<2.0
+psycopg[binary]>=3.2,<4.0
+redis>=5.0,<9.0
+httpx>=0.27,<1.0
+PyJWT[crypto]>=2.9,<3.0
+bcrypt>=4.2,<6.0
+python-socketio>=5.11,<6.0
+prometheus-client>=0.20,<1.0
+pyyaml>=6.0,<7.0
+
+# AI / agents / RAG
+langgraph>=0.2,<2.0
+chromadb>=0.5,<2.0
+openai>=1.40,<4.0
+
+# Infrastructure automation
+kubernetes>=29.0,<38.0
+
+# Platform observability (OpenTelemetry tracing, enabled via OTEL_EXPORTER_OTLP_ENDPOINT)
+opentelemetry-sdk>=1.26,<2.0
+opentelemetry-exporter-otlp-proto-http>=1.26,<2.0
+opentelemetry-instrumentation-fastapi>=0.47b0

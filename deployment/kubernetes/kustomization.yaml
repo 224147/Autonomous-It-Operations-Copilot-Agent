@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: copilot
+resources:
+  - 00-namespace.yaml
+  - 10-config.yaml
+  - 20-rbac.yaml
+  - 30-datastores.yaml
+  - 40-backend.yaml
+  - 41-migrate-job.yaml
+  - 50-frontend.yaml
+  - 60-ingress.yaml
+  - 70-networkpolicy.yaml
+# 11-secrets.example.yaml is a template and must never be applied as-is: create the Secret out-of-band.
+images:
+  - name: ghcr.io/OWNER/autonomous-it-ops-copilot-backend
+    newName: ghcr.io/OWNER/autonomous-it-ops-copilot-backend
+    newTag: latest          # CI replaces this with the commit SHA (see .github/workflows/ci.yml)
+  - name: ghcr.io/OWNER/autonomous-it-ops-copilot-frontend
+    newName: ghcr.io/OWNER/autonomous-it-ops-copilot-frontend
+    newTag: latest
